@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-st.set_page_config(page_title="דשבורד פיננסי רב-חודשי", layout="wide")
+st.set_page_config(page_title="דשבורד פיננסי", layout="wide")
 
 st.title("💰 ניתוח הוצאות רב-חודשי והשוואות")
 
