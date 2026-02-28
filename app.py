@@ -66,7 +66,7 @@ if uploaded_files:
             default=all_categories
         )
         
-        # סינון ה-DataFrame המרכזי לפי חודשים וקטגוריות שנבחרו בצד
+        # סינון ה-DataFrame המרכזי
         filtered_df = full_df[
             (full_df['Month-Year'].isin(selected_months)) & 
             (full_df['ענף'].isin(selected_categories))
@@ -78,10 +78,7 @@ if uploaded_files:
         with col1:
             st.subheader("📊 מבנה הוצאות")
             if len(selected_months) > 0:
-                # בחירת חודש ספציפי לעוגה מתוך אלו שנבחרו בסינון
                 pie_month = st.selectbox("הצג עוגה עבור חודש:", selected_months)
-                
-                # הנתונים לעוגה - רק החודש הנבחר והקטגוריות המסוננות
                 pie_data = filtered_df[filtered_df['Month-Year'] == pie_month]
                 
                 if not pie_data.empty:
@@ -103,31 +100,19 @@ if uploaded_files:
             else:
                 st.info("אין מספיק נתונים להשוואה.")
 
-        # --- הפיצר החדש: טבלת פירוט דינמית בתחתית ---
+        # --- טבלת פירוט דינמית בתחתית ---
         st.divider()
         if len(selected_months) > 0:
             st.subheader(f"📋 פירוט עסקאות לחודש {pie_month}")
             st.write(f"הטבלה מציגה את העסקאות עבור הקטגוריות שנבחרו במסנן בצד.")
             
-            # הטבלה תמיד תראה מה שקורה בתוך ה-pie_data (שכבר מסונן לפי חודש וקטגוריות)
             display_columns = ['תאריך עסקה', 'שם בית עסק', 'סכום חיוב', 'ענף', 'סוג עסקה', 'הערות']
-            
-            # מיון לפי תאריך (מהחדש לישן)
             final_table = pie_data[display_columns].sort_values('תאריך עסקה', ascending=False)
             
-            # הצגת הטבלה
             st.dataframe(final_table, use_container_width=True, hide_index=True)
             
-            # הצגת סיכום כספי מתחת לטבלה
             total_sum = final_table['סכום חיוב'].sum()
             st.info(f"סה''כ הוצאות מוצגות בטבלה: **₪{total_sum:,.2f}**")
-        
-        # --- מגמה כללית ---
-        st.divider()
-        st.subheader("📉 מגמת הוצאות לאורך כל התקופה")
-        trend_data = full_df.groupby('Month-Year')['סכום חיוב'].sum().reset_index().sort_values('Month-Year')
-        fig_line = px.line(trend_data, x='Month-Year', y='סכום חיוב', markers=True)
-        st.plotly_chart(fig_line, use_container_width=True)
 
 else:
     st.info("👋 ברוך הבא! אנא העלה את קבצי הבנק שלך (CSV או אקסל) כדי להתחיל בניתוח.")
