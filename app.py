@@ -34,7 +34,6 @@ def load_and_clean_data(file):
     
     return df
 
-# שינוי: accept_multiple_files=True
 uploaded_files = st.file_uploader("העלה קבצי בנק (ניתן לבחור כמה קבצים יחד)", type=["csv", "xlsx"], accept_multiple_files=True)
 
 if uploaded_files:
@@ -54,7 +53,6 @@ if uploaded_files:
         # --- תפריט צד (Sidebar) ---
         st.sidebar.header("הגדרות תצוגה")
         
-        # בחירת חודשים להשוואה
         available_months = sorted(full_df['Month-Year'].unique())
         selected_months = st.sidebar.multiselect(
             "בחר חודשים להשוואה", 
@@ -62,7 +60,6 @@ if uploaded_files:
             default=available_months[-2:] if len(available_months) > 1 else available_months
         )
         
-        # סינון קטגוריות
         all_categories = sorted(full_df['ענף'].unique().tolist())
         selected_categories = st.sidebar.multiselect(
             "סנן קטגוריות", 
@@ -70,7 +67,6 @@ if uploaded_files:
             default=all_categories
         )
         
-        # החלת הסינונים על ה-DataFrame המרכזי
         filtered_df = full_df[
             (full_df['Month-Year'].isin(selected_months)) & 
             (full_df['ענף'].isin(selected_categories))
@@ -79,24 +75,50 @@ if uploaded_files:
         # --- תצוגת השוואה ראשית ---
         col1, col2 = st.columns([1, 1])
         
+        # משתנה לשמירת הבחירה מהגרף
+        selected_category_from_pie = None
+
         with col1:
             st.subheader("מבנה הוצאות לפי חודש (עוגה)")
-            # נאפשר לבחור חודש ספציפי לעוגה מתוך הנבחרים
             pie_month = st.selectbox("הצג עוגה עבור חודש:", selected_months)
             pie_data = filtered_df[filtered_df['Month-Year'] == pie_month]
             
             if not pie_data.empty:
-                fig_pie = px.pie(pie_data, values='סכום חיוב', names='ענף', hole=0.4)
+                # יצירת ה-DataFrame עבור העוגה
+                category_summary = pie_data.groupby('ענף')['סכום חיוב'].sum().reset_index()
+                fig_pie = px.pie(category_summary, values='סכום חיוב', names='ענף', hole=0.4)
                 fig_pie.update_traces(textinfo='label+percent', textposition='inside')
-                st.plotly_chart(fig_pie)
+                
+                # שימוש ב-on_select כדי לתפוס את הלחיצה
+                # הערה: זה דורש גרסת Streamlit 1.35.0 ומעלה
+                event_data = st.plotly_chart(fig_pie, on_select="rerun")
+                
+                # חילוץ הקטגוריה שנלחצה
+                if event_data and "selection" in event_data and "points" in event_data["selection"]:
+                    points = event_data["selection"]["points"]
+                    if len(points) > 0:
+                        selected_category_from_pie = points[0]["label"]
             
         with col2:
             st.subheader("השוואת חודשים לפי קטגוריה")
-            # גרף עמודות מקובץ (Grouped Bar Chart)
             comparison_data = filtered_df.groupby(['Month-Year', 'ענף'])['סכום חיוב'].sum().reset_index()
             fig_comp = px.bar(comparison_data, x='ענף', y='סכום חיוב', color='Month-Year', barmode='group',
                              title="השוואת הוצאות בין חודשים נבחרים")
             st.plotly_chart(fig_comp)
+
+        # --- פירוט עסקאות לפי לחיצה ---
+        if selected_category_from_pie:
+            st.divider()
+            st.subheader(f"🔍 פירוט עסקאות עבור: {selected_category_from_pie} (חודש {pie_month})")
+            
+            # סינון הנתונים לפי הקטגוריה שנלחצה והחודש שמוצג בעוגה
+            drill_down_df = pie_data[pie_data['ענף'] == selected_category_from_pie].sort_values('תאריך עסקה', ascending=False)
+            
+            # הצגת הנתונים בטבלה יפה
+            st.dataframe(drill_down_df[['תאריך עסקה', 'שם בית עסק', 'סכום חיוב', 'סוג עסקה', 'הערות']], use_container_width=True)
+            
+            if st.button("נקה בחירה"):
+                st.rerun()
 
         # --- גרף מגמה כללי ---
         st.divider()
@@ -106,7 +128,7 @@ if uploaded_files:
         st.plotly_chart(fig_trend, use_container_width=True)
 
         # --- טבלת נתונים גולמיים ---
-        with st.expander("צפה בכל העסקאות המסוננות"):
+        with st.expander("צפה בכל העסקאות המסוננות (ללא קשר ללחיצה על הגרף)"):
             st.dataframe(filtered_df.sort_values('תאריך עסקה', ascending=False), use_container_width=True)
 
 else:
