@@ -7,23 +7,6 @@ st.set_page_config(page_title="דשבורד פיננסי - טומר", layout="wi
 
 st.title("💰 ניתוח הוצאות וניהול תקציב")
 
-# 1. פונקציית החלון הקופץ (חייבת להיות מוגדרת לפני השימוש)
-@st.dialog("פירוט עסקאות מעמיק", width="large")
-def show_details_dialog(category, df_to_show, month):
-    st.subheader(f"ענף: {category} | חודש: {month}")
-    st.write(f"סה''כ הוצאות בקטגוריה: **₪{df_to_show['סכום חיוב'].sum():,.2f}**")
-    
-    # הצגת הטבלה
-    st.dataframe(
-        df_to_show[['תאריך עסקה', 'שם בית עסק', 'סכום חיוב', 'סוג עסקה', 'הערות']], 
-        use_container_width=True,
-        hide_index=True
-    )
-    
-    if st.button("סגור"):
-        st.rerun()
-
-# 2. פונקציה לטעינת נתונים
 def load_and_clean_data(file):
     if file.name.endswith('.xlsx'):
         df = pd.read_excel(file, skiprows=3)
@@ -34,13 +17,21 @@ def load_and_clean_data(file):
             file.seek(0)
             df = pd.read_csv(file, skiprows=3, encoding='utf-8')
 
+    # ניקוי בסיסי
     df.columns = [col.replace('\n', ' ').strip() for col in df.columns]
     df = df.dropna(subset=['תאריך עסקה', 'סכום חיוב'], how='all')
+    
+    # המרת תאריך
     df['תאריך עסקה'] = pd.to_datetime(df['תאריך עסקה'], dayfirst=True, errors='coerce')
     df = df.dropna(subset=['תאריך עסקה'])
+    
+    # יצירת מפתח ייחודי למניעת כפילויות
     df['unique_id'] = df['תאריך עסקה'].astype(str) + df['שם בית עסק'] + df['סכום חיוב'].astype(str)
+    
+    # פורמט חודש לתצוגה
     df['Month-Year'] = df['תאריך עסקה'].dt.strftime('%Y-%m')
     df['סכום חיוב'] = pd.to_numeric(df['סכום חיוב'], errors='coerce').fillna(0)
+    
     return df
 
 uploaded_files = st.file_uploader("העלה קבצי בנק (CSV/XLSX)", type=["csv", "xlsx"], accept_multiple_files=True)
@@ -59,65 +50,84 @@ if uploaded_files:
         full_df = pd.concat(all_dfs, ignore_index=True).drop_duplicates(subset=['unique_id'])
         
         # --- תפריט צד (Sidebar) ---
-        st.sidebar.header("מסננים")
+        st.sidebar.header("⚙️ מסננים")
         
-        # פילטר חודשים
         available_months = sorted(full_df['Month-Year'].unique(), reverse=True)
-        selected_months = st.sidebar.multiselect("בחר חודשים להצגה", options=available_months, default=available_months[:2])
+        selected_months = st.sidebar.multiselect(
+            "1. בחר חודשים להשוואה", 
+            options=available_months, 
+            default=available_months[:2] if len(available_months) > 1 else available_months
+        )
         
-        # פילטר קטגוריות (הוחזר!)
         all_categories = sorted(full_df['ענף'].unique().tolist())
-        selected_categories = st.sidebar.multiselect("סנן קטגוריות ענף", options=all_categories, default=all_categories)
+        selected_categories = st.sidebar.multiselect(
+            "2. סנן קטגוריות ענף", 
+            options=all_categories, 
+            default=all_categories
+        )
         
-        # החלת סינון על הנתונים
+        # סינון ה-DataFrame המרכזי לפי חודשים וקטגוריות שנבחרו בצד
         filtered_df = full_df[
             (full_df['Month-Year'].isin(selected_months)) & 
             (full_df['ענף'].isin(selected_categories))
         ]
         
-        # --- תצוגה ראשית ---
+        # --- תצוגה גרפית ---
         col1, col2 = st.columns([1, 1])
         
         with col1:
-            st.subheader("מבנה הוצאות (לחץ על פלח בעוגה)")
+            st.subheader("📊 מבנה הוצאות")
             if len(selected_months) > 0:
+                # בחירת חודש ספציפי לעוגה מתוך אלו שנבחרו בסינון
                 pie_month = st.selectbox("הצג עוגה עבור חודש:", selected_months)
+                
+                # הנתונים לעוגה - רק החודש הנבחר והקטגוריות המסוננות
                 pie_data = filtered_df[filtered_df['Month-Year'] == pie_month]
                 
                 if not pie_data.empty:
                     summary = pie_data.groupby('ענף')['סכום חיוב'].sum().reset_index()
                     fig_pie = px.pie(summary, values='סכום חיוב', names='ענף', hole=0.4)
                     fig_pie.update_traces(textinfo='label+percent', textposition='inside')
-                    
-                    # שימוש ב-on_select כדי לתפוס לחיצות
-                    selection = st.plotly_chart(fig_pie, on_select="rerun", key="main_pie")
-                    
-                    # בדיקה אם נלחץ פלח
-                    if selection and "selection" in selection and selection["selection"]["points"]:
-                        clicked_category = selection["selection"]["points"][0]["label"]
-                        # שליפת נתונים ופתיחת החלון הקופץ
-                        details_to_show = pie_data[pie_data['ענף'] == clicked_category]
-                        show_details_dialog(clicked_category, details_to_show, pie_month)
+                    st.plotly_chart(fig_pie, use_container_width=True)
                 else:
-                    st.warning("אין נתונים לחודש זה תחת הקטגוריות שנבחרו.")
+                    st.warning("אין נתונים להצגה בחודש זה עם הסינונים הנוכחיים.")
             else:
-                st.info("בחר חודש בתפריט הצד")
+                st.info("אנא בחר לפחות חודש אחד בתפריט הצד.")
 
         with col2:
-            st.subheader("השוואה בין חודשים נבחרים")
+            st.subheader("📈 השוואת חודשים נבחרים")
             if not filtered_df.empty:
                 monthly_comp = filtered_df.groupby(['Month-Year', 'ענף'])['סכום חיוב'].sum().reset_index()
                 fig_bar = px.bar(monthly_comp, x='ענף', y='סכום חיוב', color='Month-Year', barmode='group')
-                st.plotly_chart(fig_bar)
+                st.plotly_chart(fig_bar, use_container_width=True)
             else:
-                st.info("אין נתונים להשוואה")
+                st.info("אין מספיק נתונים להשוואה.")
 
-        # --- מגמה ---
+        # --- הפיצר החדש: טבלת פירוט דינמית בתחתית ---
         st.divider()
-        st.subheader("מגמת הוצאות חודשית (כללי)")
+        if len(selected_months) > 0:
+            st.subheader(f"📋 פירוט עסקאות לחודש {pie_month}")
+            st.write(f"הטבלה מציגה את העסקאות עבור הקטגוריות שנבחרו במסנן בצד.")
+            
+            # הטבלה תמיד תראה מה שקורה בתוך ה-pie_data (שכבר מסונן לפי חודש וקטגוריות)
+            display_columns = ['תאריך עסקה', 'שם בית עסק', 'סכום חיוב', 'ענף', 'סוג עסקה', 'הערות']
+            
+            # מיון לפי תאריך (מהחדש לישן)
+            final_table = pie_data[display_columns].sort_values('תאריך עסקה', ascending=False)
+            
+            # הצגת הטבלה
+            st.dataframe(final_table, use_container_width=True, hide_index=True)
+            
+            # הצגת סיכום כספי מתחת לטבלה
+            total_sum = final_table['סכום חיוב'].sum()
+            st.info(f"סה''כ הוצאות מוצגות בטבלה: **₪{total_sum:,.2f}**")
+        
+        # --- מגמה כללית ---
+        st.divider()
+        st.subheader("📉 מגמת הוצאות לאורך כל התקופה")
         trend_data = full_df.groupby('Month-Year')['סכום חיוב'].sum().reset_index().sort_values('Month-Year')
         fig_line = px.line(trend_data, x='Month-Year', y='סכום חיוב', markers=True)
         st.plotly_chart(fig_line, use_container_width=True)
 
 else:
-    st.info("אנא העלה קבצים כדי להתחיל.")
+    st.info("👋 ברוך הבא! אנא העלה את קבצי הבנק שלך (CSV או אקסל) כדי להתחיל בניתוח.")
