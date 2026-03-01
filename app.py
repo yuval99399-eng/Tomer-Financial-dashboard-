@@ -33,7 +33,7 @@ def load_and_clean_bank_data(file):
     """Updated function to handle both CSV and XLS/XLSX for Bank Activity"""
     # Logic to handle different file extensions
     if file.name.endswith(('.xls', '.xlsx')):
-        # Reading Excel files (binary format)
+        # Reading Excel files (binary format) - now supported by xlrd and openpyxl
         df = pd.read_excel(file, skiprows=5)
     else:
         # Reading CSV files (text format) with encoding fallback
@@ -138,7 +138,7 @@ with tab_credit:
                 total_sum = final_table['סכום חיוב'].sum()
                 st.info(f"סה''כ הוצאות מוצגות בטבלה: **₪{total_sum:,.2f}**")
 
-# --- TAB 2: BANK ACCOUNT ACTIVITY (FIXED LOGIC) ---
+# --- TAB 2: BANK ACCOUNT ACTIVITY ---
 with tab_bank:
     st.header("Bank Account Flow Analysis")
     uploaded_bank = st.file_uploader("Upload Bank Activity Files 👋", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="bank_up")
@@ -147,7 +147,7 @@ with tab_bank:
         bank_dfs = []
         for b_file in uploaded_bank:
             try:
-                # The updated function now handles both text (csv) and binary (xls)
+                # The function will now work for .xls thanks to the xlrd dependency
                 bank_dfs.append(load_and_clean_bank_data(b_file))
             except Exception as e:
                 st.error(f"Error in bank file {b_file.name}: {e}")
