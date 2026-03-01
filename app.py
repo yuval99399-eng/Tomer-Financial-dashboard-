@@ -108,6 +108,8 @@ with tab_credit:
                         fig_pie = px.pie(summary, values='סכום חיוב', names='ענף', hole=0.4)
                         fig_pie.update_traces(textinfo='label+percent', textposition='inside')
                         st.plotly_chart(fig_pie, use_container_width=True)
+                    else:
+                        st.warning("אין נתונים להצגה בחודש זה עם הסינונים הנוכחיים.")
                 else:
                     st.info("אנא בחר לפחות חודש אחד בתפריט הצד.")
 
@@ -115,12 +117,19 @@ with tab_credit:
                 st.subheader("Compare selected months 📈")
                 if not filtered_df.empty:
                     monthly_comp = filtered_df.groupby(['Month-Year', 'ענף'])['סכום חיוב'].sum().reset_index()
-                    # Added text display on bars
                     fig_bar = px.bar(monthly_comp, x='ענף', y='סכום חיוב', color='Month-Year', 
                                      barmode='group', text='סכום חיוב')
                     
-                    # Vertical text orientation and formatting
+                    # Calculate max value and add 15% padding for the labels
+                    max_y = monthly_comp['סכום חיוב'].max()
+                    
                     fig_bar.update_traces(texttemplate='%{text:.2s}', textposition='outside', textangle=-90)
+                    
+                    # Set Y-axis range and top margin to prevent clipping
+                    fig_bar.update_layout(
+                        yaxis_range=[0, max_y * 1.15],
+                        margin=dict(t=50)
+                    )
                     st.plotly_chart(fig_bar, use_container_width=True)
                 else:
                     st.info("אין מספיק נתונים להשוואה.")
@@ -156,13 +165,20 @@ with tab_bank:
                                                        var_name='Type', value_name='Amount')
             
             st.subheader("Monthly Income vs Expenses")
-            # Added text display for Bank Chart
             fig_bank_bar = px.bar(bank_plot_data, x='Month-Year', y='Amount', color='Type', 
                                  barmode='group', color_discrete_map={'זכות': '#2ECC71', 'חובה': '#E74C3C'},
                                  text='Amount')
             
-            # Formatting bar labels to be vertical and clean
+            # Calculate max bank value and add 20% padding for the labels
+            max_y_bank = bank_plot_data['Amount'].max()
+            
             fig_bank_bar.update_traces(texttemplate='%{text:.3s}', textposition='outside', textangle=-90)
+            
+            # Set Y-axis range and top margin to prevent clipping
+            fig_bank_bar.update_layout(
+                yaxis_range=[0, max_y_bank * 1.2],
+                margin=dict(t=60)
+            )
             st.plotly_chart(fig_bank_bar, use_container_width=True)
             
             st.divider()
