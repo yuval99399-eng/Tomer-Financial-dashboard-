@@ -30,18 +30,24 @@ def load_and_clean_data(file):
     return df
 
 def load_and_clean_bank_data(file):
-    """New function for Bank Activity (Checking Account)"""
-    try:
-        df = pd.read_csv(file, skiprows=5, encoding='windows-1255')
-    except:
-        file.seek(0)
-        df = pd.read_csv(file, skiprows=5, encoding='utf-8')
+    """Updated function to handle both CSV and XLS/XLSX for Bank Activity"""
+    # Logic to handle different file extensions
+    if file.name.endswith(('.xls', '.xlsx')):
+        # Reading Excel files (binary format)
+        df = pd.read_excel(file, skiprows=5)
+    else:
+        # Reading CSV files (text format) with encoding fallback
+        try:
+            df = pd.read_csv(file, skiprows=5, encoding='windows-1255')
+        except UnicodeDecodeError:
+            file.seek(0)
+            df = pd.read_csv(file, skiprows=5, encoding='utf-8')
 
-    # Cleaning Headers
+    # Cleaning Headers - removing spaces and hidden characters
     df.columns = [col.strip() for col in df.columns]
     df = df.dropna(subset=['תאריך'], how='all')
     
-    # Handling Excel Serial Dates vs String Dates
+    # Handling Excel Serial Dates (numeric) vs String Dates
     if pd.api.types.is_numeric_dtype(df['תאריך']):
         df['תאריך'] = pd.to_datetime(df['תאריך'], unit='D', origin='1899-12-30')
     else:
@@ -50,9 +56,10 @@ def load_and_clean_bank_data(file):
     df = df.dropna(subset=['תאריך'])
     df['Month-Year'] = df['תאריך'].dt.strftime('%Y-%m')
 
-    # Cleaning Credit (Income) and Debit (Expense) values
+    # Cleaning Income (Zechut) and Expenses (Chova)
     for col in ['זכות', 'חובה']:
         if col in df.columns:
+            # Cleaning commas, spaces and ensuring numeric conversion
             df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '').str.strip(), errors='coerce').fillna(0)
         else:
             df[col] = 0.0
@@ -64,8 +71,7 @@ tab_credit, tab_bank = st.tabs(["💳 Credit Card Analysis", "🏦 Bank Account 
 
 # --- TAB 1: CREDIT CARD ANALYSIS (YOUR ORIGINAL CODE) ---
 with tab_credit:
-    # Uploading File
-    uploaded_files = st.file_uploader("Welcome 👋 Please Upload Your Files :)", type=["csv", "xlsx","xls"], accept_multiple_files=True, key="credit_up")
+    uploaded_files = st.file_uploader("Welcome 👋 Please Upload Your Files :)", type=["csv", "xlsx"], accept_multiple_files=True, key="credit_up")
     
     if uploaded_files:
         all_dfs = []
@@ -77,10 +83,8 @@ with tab_credit:
                 st.error(f"Error in file {file.name}: {e}")
         
         if all_dfs:
-            # No Duplication Allowed 
             full_df = pd.concat(all_dfs, ignore_index=True).drop_duplicates(subset=['unique_id'])
             
-            # Sidebars
             st.sidebar.header("⚙️ מסננים")
             available_months = sorted(full_df['Month-Year'].unique(), reverse=True)
             selected_months = st.sidebar.multiselect(
@@ -100,7 +104,6 @@ with tab_credit:
                 (full_df['ענף'].isin(selected_categories))
             ]
             
-            # Graphs Design 
             col1, col2 = st.columns([1, 1])
             with col1:
                 st.subheader("Pie Chart 📊")
@@ -126,7 +129,6 @@ with tab_credit:
                 else:
                     st.info("אין מספיק נתונים להשוואה.")
 
-            # Row data table
             st.divider()
             if len(selected_months) > 0 and 'pie_data' in locals() and not pie_data.empty:
                 st.subheader(f"📋 פירוט עסקאות לחודש {pie_month}")
@@ -136,27 +138,25 @@ with tab_credit:
                 total_sum = final_table['סכום חיוב'].sum()
                 st.info(f"סה''כ הוצאות מוצגות בטבלה: **₪{total_sum:,.2f}**")
 
-# --- TAB 2: BANK ACCOUNT ACTIVITY (THE NEW SECTION) ---
+# --- TAB 2: BANK ACCOUNT ACTIVITY (FIXED LOGIC) ---
 with tab_bank:
     st.header("Bank Account Flow Analysis")
-    uploaded_bank = st.file_uploader("Upload Bank Activity Files 👋", type=["csv", "xlsx","xls"], accept_multiple_files=True, key="bank_up")
+    uploaded_bank = st.file_uploader("Upload Bank Activity Files 👋", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="bank_up")
     
     if uploaded_bank:
         bank_dfs = []
         for b_file in uploaded_bank:
             try:
+                # The updated function now handles both text (csv) and binary (xls)
                 bank_dfs.append(load_and_clean_bank_data(b_file))
             except Exception as e:
                 st.error(f"Error in bank file {b_file.name}: {e}")
         
         if bank_dfs:
             combined_bank_df = pd.concat(bank_dfs, ignore_index=True)
-            
-            # Monthly summaries
             monthly_bank_summary = combined_bank_df.groupby('Month-Year').agg({'זכות': 'sum', 'חובה': 'sum'}).reset_index()
             monthly_bank_summary = monthly_bank_summary.sort_values('Month-Year')
             
-            # Reshape for Charting
             bank_plot_data = monthly_bank_summary.melt(id_vars='Month-Year', value_vars=['זכות', 'חובה'], 
                                                        var_name='Type', value_name='Amount')
             
@@ -165,12 +165,10 @@ with tab_bank:
                                  barmode='group', color_discrete_map={'זכות': '#2ECC71', 'חובה': '#E74C3C'})
             st.plotly_chart(fig_bank_bar, use_container_width=True)
             
-            # Detailed Balance Table
             st.divider()
             st.subheader("Monthly Balance Summary Table")
             monthly_bank_summary['Net'] = monthly_bank_summary['זכות'] - monthly_bank_summary['חובה']
             st.dataframe(monthly_bank_summary.sort_values('Month-Year', ascending=False), use_container_width=True, hide_index=True)
 
-# Final fallback for empty state
 if not uploaded_files and not uploaded_bank:
-    st.info("Welcome 👋 Please Upload Your Files to start analysis.")
+    st.info("Welcome 👋 Please Upload Your Files :)")
