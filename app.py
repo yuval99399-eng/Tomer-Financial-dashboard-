@@ -30,24 +30,19 @@ def load_and_clean_data(file):
     return df
 
 def load_and_clean_bank_data(file):
-    """Updated function to handle both CSV and XLS/XLSX for Bank Activity"""
-    # Logic to handle different file extensions
+    """Processes bank account activity files (Current Account)"""
     if file.name.endswith(('.xls', '.xlsx')):
-        # Reading Excel files (binary format) - now supported by xlrd and openpyxl
         df = pd.read_excel(file, skiprows=5)
     else:
-        # Reading CSV files (text format) with encoding fallback
         try:
             df = pd.read_csv(file, skiprows=5, encoding='windows-1255')
         except UnicodeDecodeError:
             file.seek(0)
             df = pd.read_csv(file, skiprows=5, encoding='utf-8')
 
-    # Cleaning Headers - removing spaces and hidden characters
     df.columns = [col.strip() for col in df.columns]
     df = df.dropna(subset=['תאריך'], how='all')
     
-    # Handling Excel Serial Dates (numeric) vs String Dates
     if pd.api.types.is_numeric_dtype(df['תאריך']):
         df['תאריך'] = pd.to_datetime(df['תאריך'], unit='D', origin='1899-12-30')
     else:
@@ -56,10 +51,8 @@ def load_and_clean_bank_data(file):
     df = df.dropna(subset=['תאריך'])
     df['Month-Year'] = df['תאריך'].dt.strftime('%Y-%m')
 
-    # Cleaning Income (Zechut) and Expenses (Chova)
     for col in ['זכות', 'חובה']:
         if col in df.columns:
-            # Cleaning commas, spaces and ensuring numeric conversion
             df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '').str.strip(), errors='coerce').fillna(0)
         else:
             df[col] = 0.0
@@ -69,7 +62,7 @@ def load_and_clean_bank_data(file):
 # --- INTERFACE TABS ---
 tab_credit, tab_bank = st.tabs(["💳 Credit Card Analysis", "🏦 Bank Account Activity"])
 
-# --- TAB 1: CREDIT CARD ANALYSIS (YOUR ORIGINAL CODE) ---
+# --- TAB 1: CREDIT CARD ANALYSIS ---
 with tab_credit:
     uploaded_files = st.file_uploader("Welcome 👋 Please Upload Your Files :)", type=["csv", "xlsx"], accept_multiple_files=True, key="credit_up")
     
@@ -115,8 +108,6 @@ with tab_credit:
                         fig_pie = px.pie(summary, values='סכום חיוב', names='ענף', hole=0.4)
                         fig_pie.update_traces(textinfo='label+percent', textposition='inside')
                         st.plotly_chart(fig_pie, use_container_width=True)
-                    else:
-                        st.warning("אין נתונים להצגה בחודש זה עם הסינונים הנוכחיים.")
                 else:
                     st.info("אנא בחר לפחות חודש אחד בתפריט הצד.")
 
@@ -124,7 +115,12 @@ with tab_credit:
                 st.subheader("Compare selected months 📈")
                 if not filtered_df.empty:
                     monthly_comp = filtered_df.groupby(['Month-Year', 'ענף'])['סכום חיוב'].sum().reset_index()
-                    fig_bar = px.bar(monthly_comp, x='ענף', y='סכום חיוב', color='Month-Year', barmode='group')
+                    # Added text display on bars
+                    fig_bar = px.bar(monthly_comp, x='ענף', y='סכום חיוב', color='Month-Year', 
+                                     barmode='group', text='סכום חיוב')
+                    
+                    # Vertical text orientation and formatting
+                    fig_bar.update_traces(texttemplate='%{text:.2s}', textposition='outside', textangle=-90)
                     st.plotly_chart(fig_bar, use_container_width=True)
                 else:
                     st.info("אין מספיק נתונים להשוואה.")
@@ -147,7 +143,6 @@ with tab_bank:
         bank_dfs = []
         for b_file in uploaded_bank:
             try:
-                # The function will now work for .xls thanks to the xlrd dependency
                 bank_dfs.append(load_and_clean_bank_data(b_file))
             except Exception as e:
                 st.error(f"Error in bank file {b_file.name}: {e}")
@@ -161,8 +156,13 @@ with tab_bank:
                                                        var_name='Type', value_name='Amount')
             
             st.subheader("Monthly Income vs Expenses")
+            # Added text display for Bank Chart
             fig_bank_bar = px.bar(bank_plot_data, x='Month-Year', y='Amount', color='Type', 
-                                 barmode='group', color_discrete_map={'זכות': '#2ECC71', 'חובה': '#E74C3C'})
+                                 barmode='group', color_discrete_map={'זכות': '#2ECC71', 'חובה': '#E74C3C'},
+                                 text='Amount')
+            
+            # Formatting bar labels to be vertical and clean
+            fig_bank_bar.update_traces(texttemplate='%{text:.3s}', textposition='outside', textangle=-90)
             st.plotly_chart(fig_bank_bar, use_container_width=True)
             
             st.divider()
