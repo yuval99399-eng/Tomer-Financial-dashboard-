@@ -9,7 +9,7 @@ st.title("Financial Analysis 💰")
 # --- DATA PROCESSING FUNCTIONS ---
 
 def load_and_clean_data(file):
-    """Processes credit card files"""
+    """Processes credit card files - Original Logic"""
     if file.name.endswith('.xlsx'):
         df = pd.read_excel(file, skiprows=3)
     else:
@@ -30,21 +30,18 @@ def load_and_clean_data(file):
     return df
 
 def load_and_clean_bank_data(file):
-    """Processes bank account activity files (Current Account)"""
-    # Reading file with headers typically on row 6
+    """New function for Bank Activity (Checking Account)"""
     try:
         df = pd.read_csv(file, skiprows=5, encoding='windows-1255')
     except:
         file.seek(0)
         df = pd.read_csv(file, skiprows=5, encoding='utf-8')
 
-    # Clean column names
+    # Cleaning Headers
     df.columns = [col.strip() for col in df.columns]
-    
-    # Remove empty rows
     df = df.dropna(subset=['תאריך'], how='all')
     
-    # Handle Date conversion (Excel serial numbers vs strings)
+    # Handling Excel Serial Dates vs String Dates
     if pd.api.types.is_numeric_dtype(df['תאריך']):
         df['תאריך'] = pd.to_datetime(df['תאריך'], unit='D', origin='1899-12-30')
     else:
@@ -53,10 +50,9 @@ def load_and_clean_bank_data(file):
     df = df.dropna(subset=['תאריך'])
     df['Month-Year'] = df['תאריך'].dt.strftime('%Y-%m')
 
-    # Convert Credit (Income) and Debit (Expense) to numeric values
+    # Cleaning Credit (Income) and Debit (Expense) values
     for col in ['זכות', 'חובה']:
         if col in df.columns:
-            # Cleaning string formatting like commas or spaces
             df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '').str.strip(), errors='coerce').fillna(0)
         else:
             df[col] = 0.0
@@ -64,13 +60,13 @@ def load_and_clean_bank_data(file):
     return df
 
 # --- INTERFACE TABS ---
-# Separating Credit Analysis from Bank Activity for better UX
 tab_credit, tab_bank = st.tabs(["💳 Credit Card Analysis", "🏦 Bank Account Activity"])
 
-# --- TAB 1: CREDIT CARD ANALYSIS (EXISTING CODE) ---
+# --- TAB 1: CREDIT CARD ANALYSIS (YOUR ORIGINAL CODE) ---
 with tab_credit:
     # Uploading File
     uploaded_files = st.file_uploader("Welcome 👋 Please Upload Your Files :)", type=["csv", "xlsx"], accept_multiple_files=True, key="credit_up")
+    
     if uploaded_files:
         all_dfs = []
         for file in uploaded_files:
@@ -134,20 +130,16 @@ with tab_credit:
             st.divider()
             if len(selected_months) > 0 and 'pie_data' in locals() and not pie_data.empty:
                 st.subheader(f"📋 פירוט עסקאות לחודש {pie_month}")
-                st.write(f"הטבלה מציגה את העסקאות עבור הקטגוריות שנבחרו במסנן בצד.")
-                
                 display_columns = ['תאריך עסקה', 'שם בית עסק', 'סכום חיוב', 'ענף', 'סוג עסקה', 'הערות']
                 final_table = pie_data[display_columns].sort_values('תאריך עסקה', ascending=False)
-                
                 st.dataframe(final_table, use_container_width=True, hide_index=True)
-                
                 total_sum = final_table['סכום חיוב'].sum()
                 st.info(f"סה''כ הוצאות מוצגות בטבלה: **₪{total_sum:,.2f}**")
 
-# --- TAB 2: BANK ACCOUNT ACTIVITY (NEW SECTION) ---
+# --- TAB 2: BANK ACCOUNT ACTIVITY (THE NEW SECTION) ---
 with tab_bank:
     st.header("Bank Account Flow Analysis")
-    uploaded_bank = st.file_uploader("Upload Bank Activity Files 👋", type=["csv", "xls", "xlsx"], accept_multiple_files=True, key="bank_up")
+    uploaded_bank = st.file_uploader("Upload Bank Activity Files 👋", type=["csv", "xlsx"], accept_multiple_files=True, key="bank_up")
     
     if uploaded_bank:
         bank_dfs = []
@@ -160,30 +152,25 @@ with tab_bank:
         if bank_dfs:
             combined_bank_df = pd.concat(bank_dfs, ignore_index=True)
             
-            # Monthly Income vs Expenses calculation
+            # Monthly summaries
             monthly_bank_summary = combined_bank_df.groupby('Month-Year').agg({'זכות': 'sum', 'חובה': 'sum'}).reset_index()
             monthly_bank_summary = monthly_bank_summary.sort_values('Month-Year')
             
-            # Reshaping data for grouped bar chart
+            # Reshape for Charting
             bank_plot_data = monthly_bank_summary.melt(id_vars='Month-Year', value_vars=['זכות', 'חובה'], 
-                                                       var_name='Transaction Type', value_name='Amount')
+                                                       var_name='Type', value_name='Amount')
             
-            st.subheader("Monthly Income (Zechut) vs Expenses (Chova)")
-            # Using specific financial colors: Green for Income, Red for Expenses
-            fig_bank_bar = px.bar(bank_plot_data, x='Month-Year', y='Amount', color='Transaction Type', 
+            st.subheader("Monthly Income vs Expenses")
+            fig_bank_bar = px.bar(bank_plot_data, x='Month-Year', y='Amount', color='Type', 
                                  barmode='group', color_discrete_map={'זכות': '#2ECC71', 'חובה': '#E74C3C'})
             st.plotly_chart(fig_bank_bar, use_container_width=True)
             
-            # Balance Summary Table
+            # Detailed Balance Table
             st.divider()
-            st.subheader("Monthly Balance Summary")
-            monthly_bank_summary['Net Balance'] = monthly_bank_summary['זכות'] - monthly_bank_summary['חובה']
-            
-            # Formatting for display
-            display_bank = monthly_bank_summary.copy()
-            display_bank.columns = ['חודש', 'סה"כ הכנסות (זכות)', 'סה"כ הוצאות (חובה)', 'מאזן נטו']
-            st.dataframe(display_bank.sort_values('חודש', ascending=False), use_container_width=True, hide_index=True)
+            st.subheader("Monthly Balance Summary Table")
+            monthly_bank_summary['Net'] = monthly_bank_summary['זכות'] - monthly_bank_summary['חובה']
+            st.dataframe(monthly_bank_summary.sort_values('Month-Year', ascending=False), use_container_width=True, hide_index=True)
 
-else:
-    if not uploaded_files:
-        st.info("Welcome 👋 Please Upload Your Files :)")
+# Final fallback for empty state
+if not uploaded_files and not uploaded_bank:
+    st.info("Welcome 👋 Please Upload Your Files to start analysis.")
