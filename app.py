@@ -65,7 +65,7 @@ tab_credit, tab_bank = st.tabs(["💳 Credit Card Analysis", "🏦 Bank Account 
 # --- TAB 1: CREDIT CARD ANALYSIS (YOUR ORIGINAL CODE) ---
 with tab_credit:
     # Uploading File
-    uploaded_files = st.file_uploader("Welcome 👋 Please Upload Your Files :)", type=["csv", "xlsx"], accept_multiple_files=True, key="credit_up")
+    uploaded_files = st.file_uploader("Welcome 👋 Please Upload Your Files :)", type=["csv", "xlsx","xls"], accept_multiple_files=True, key="credit_up")
     
     if uploaded_files:
         all_dfs = []
@@ -139,7 +139,7 @@ with tab_credit:
 # --- TAB 2: BANK ACCOUNT ACTIVITY (THE NEW SECTION) ---
 with tab_bank:
     st.header("Bank Account Flow Analysis")
-    uploaded_bank = st.file_uploader("Upload Bank Activity Files 👋", type=["csv", "xlsx"], accept_multiple_files=True, key="bank_up")
+    uploaded_bank = st.file_uploader("Upload Bank Activity Files 👋", type=["csv", "xlsx","xls"], accept_multiple_files=True, key="bank_up")
     
     if uploaded_bank:
         bank_dfs = []
