@@ -7,13 +7,8 @@ import io
 st.set_page_config(page_title="Tomer Financial Dashboard", layout="wide")
 st.title("Financial Analysis 💰")
 
-# --- SMART DATA PROCESSING FUNCTIONS ---
-
-def find_header_row(file, keywords):
-    """
-    Scans the first 20 rows of a file to find the row that contains 
-    most of the expected headers.
-    """
+# SMART DATA PROCESSING FUNCTIONS 
+def find_header_row(file, keywords): """Scans the first 20 rows of a file to find the row that contains most of the expected headers."""
     file.seek(0)
     if file.name.endswith(('.xls', '.xlsx')):
         df_peek = pd.read_excel(file, nrows=20, header=None)
@@ -23,7 +18,6 @@ def find_header_row(file, keywords):
         except:
             file.seek(0)
             df_peek = pd.read_csv(file, nrows=20, header=None, encoding='utf-8')
-
     max_hits = 0
     header_idx = 0
     for i, row in df_peek.iterrows():
@@ -32,16 +26,10 @@ def find_header_row(file, keywords):
         if hits > max_hits:
             max_hits = hits
             header_idx = i
-            
     return header_idx
 
-def smart_rename_columns(df):
-    """
-    Refined logic to prevent duplicate column names.
-    Priority is given to exact matches before trying to 'guess' via keywords.
-    """
+def smart_rename_columns(df): """ Refined logic to prevent duplicate column names. Priority is given to exact matches before trying to 'guess' via keywords."""
     df.columns = [str(col).replace('\n', ' ').strip() for col in df.columns]
-    
     targets = {
         'תאריך עסקה': ['תאריך', 'עסקה'],
         'שם בית עסק': ['בית עסק', 'תיאור', 'פעולה'],
@@ -62,8 +50,7 @@ def smart_rename_columns(df):
             
         for target, keywords in targets.items():
             if target in used_targets:
-                continue
-                
+                continue  
             if target == 'תאריך עסקה' and any(k in col for k in keywords) and not any(k in col for k in ['סכום', 'חיוב']):
                 new_mapping[col] = target
                 used_targets.add(target)
@@ -71,16 +58,15 @@ def smart_rename_columns(df):
             elif target != 'תאריך עסקה' and any(k in col for k in keywords):
                 new_mapping[col] = target
                 used_targets.add(target)
-                break
-                
+                break        
     return df.rename(columns=new_mapping)
 
-def load_and_clean_data(file):
-    """Universal Credit Card Loader"""
+
+def load_and_clean_data(file): """Universal Credit Card Loader"""
     credit_keys = ['תאריך', 'עסקה', 'בית עסק', 'סכום']
     header_idx = find_header_row(file, credit_keys)
     file.seek(0)
-    
+
     if file.name.endswith('.xlsx'):
         df = pd.read_excel(file, skiprows=header_idx)
     else:
@@ -103,15 +89,13 @@ def load_and_clean_data(file):
     if 'ענף' not in df.columns:
         df['ענף'] = 'General / Uncategorized'
     df['ענף'] = df['ענף'].fillna('General / Uncategorized')
-
     df['unique_id'] = df['תאריך עסקה'].astype(str) + df.get('שם בית עסק', 'Unknown').astype(str) + df['סכום חיוב'].astype(str)
     df['Month-Year'] = df['תאריך עסקה'].dt.strftime('%Y-%m')
     df['סכום חיוב'] = pd.to_numeric(df['סכום חיוב'], errors='coerce').fillna(0)
     
     return df
 
-def load_and_clean_bank_data(file):
-    """Universal Bank Activity Loader"""
+def load_and_clean_bank_data(file): """Universal Bank Activity Loader"""
     bank_keys = ['זכות', 'חובה', 'פעולה', 'יתרה']
     header_idx = find_header_row(file, bank_keys)
     file.seek(0)
@@ -150,10 +134,10 @@ def load_and_clean_bank_data(file):
             
     return df
 
-# --- INTERFACE TABS ---
+# INTERFACE TABS 
 tab_credit, tab_bank = st.tabs(["💳 Credit Card Analysis", "🏦 Bank Account Activity"])
 
-# --- TAB 1: CREDIT CARD ANALYSIS ---
+#  TAB 1: CREDIT CARD ANALYSIS 
 with tab_credit:
     uploaded_files = st.file_uploader("Upload Credit Files 👋", type=["csv", "xlsx"], accept_multiple_files=True, key="credit_up")
     
@@ -173,13 +157,11 @@ with tab_credit:
             st.sidebar.header("⚙️ Filters")
             available_months = sorted(full_df['Month-Year'].unique(), reverse=True)
             selected_months = st.sidebar.multiselect("1. Month", options=available_months, default=available_months[:12])
-            
             all_categories = sorted(full_df['ענף'].unique().tolist())
             selected_categories = st.sidebar.multiselect("2. Category", options=all_categories, default=all_categories)
-            
             filtered_df = full_df[(full_df['Month-Year'].isin(selected_months)) & (full_df['ענף'].isin(selected_categories))]
-            
             col1, col2 = st.columns(2)
+            
             with col1:
                 st.subheader("Pie Chart 📊")
                 if len(selected_months) > 0:
@@ -205,11 +187,10 @@ with tab_credit:
                 display_cols = ['תאריך עסקה', 'שם בית עסק', 'סכום חיוב', 'ענף', 'סוג עסקה']
                 st.dataframe(pie_data[[c for c in display_cols if c in pie_data.columns]].sort_values('תאריך עסקה', ascending=False), use_container_width=True, hide_index=True)
 
-# --- TAB 2: BANK ACCOUNT ACTIVITY ---
+# TAB 2: BANK ACCOUNT ACTIVITY 
 with tab_bank:
     st.header("Bank Flow Analysis")
     uploaded_bank = st.file_uploader("Upload Bank Files 👋", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="bank_up")
-    
     if uploaded_bank:
         bank_dfs = []
         for b_file in uploaded_bank:
@@ -222,7 +203,6 @@ with tab_bank:
             full_bank_df = pd.concat(bank_dfs, ignore_index=True)
             m_bank = full_bank_df.groupby('Month-Year').agg({'זכות': 'sum', 'חובה': 'sum'}).reset_index().sort_values('Month-Year')
             plot_data = m_bank.melt(id_vars='Month-Year', value_vars=['זכות', 'חובה'], var_name='Type', value_name='Amount')
-            
             st.subheader("Monthly Income vs Expenses")
             fig_bank = px.bar(plot_data, x='Month-Year', y='Amount', color='Type', barmode='group', text='Amount',
                              color_discrete_map={'זכות': '#2ECC71', 'חובה': '#E74C3C'})
@@ -230,18 +210,14 @@ with tab_bank:
             fig_bank.update_layout(yaxis_range=[0, plot_data['Amount'].max() * 1.25], margin=dict(t=60))
             st.plotly_chart(fig_bank, use_container_width=True)
 
-            # --- NEW: Detailed Bank Transactions Table ---
+            # Detailed Bank Transactions Table 
             st.divider()
             available_bank_months = sorted(full_bank_df['Month-Year'].unique(), reverse=True)
             
             if available_bank_months:
                 st.subheader("📋 Detailed Bank Transactions")
                 bank_month_detail = st.selectbox("Select Month for Detail:", available_bank_months, key="bank_month_sel")
-                
-                # Filter data for the specific month
                 month_detail_df = full_bank_df[full_bank_df['Month-Year'] == bank_month_detail].copy()
-                
-                # Display the data table (excluding the helper date column)
                 cols_to_show = [c for c in month_detail_df.columns if c != 'תאריך_מסודר']
                 st.dataframe(month_detail_df[cols_to_show].sort_values('Month-Year', ascending=False), 
                              use_container_width=True, hide_index=True)
