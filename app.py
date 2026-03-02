@@ -16,7 +16,6 @@ def find_header_row(file, keywords):
     """
     file.seek(0)
     if file.name.endswith(('.xls', '.xlsx')):
-        # Reading only the beginning for detection
         df_peek = pd.read_excel(file, nrows=20, header=None)
     else:
         try:
@@ -25,7 +24,6 @@ def find_header_row(file, keywords):
             file.seek(0)
             df_peek = pd.read_csv(file, nrows=20, header=None, encoding='utf-8')
 
-    # Find the row with the most keyword hits
     max_hits = 0
     header_idx = 0
     for i, row in df_peek.iterrows():
@@ -39,42 +37,55 @@ def find_header_row(file, keywords):
 
 def smart_rename_columns(df):
     """
-    Attempts to map inconsistent column names to standard keys 
-    using keyword detection (Fuzzy Matching).
+    Refined logic to prevent duplicate column names.
+    Priority is given to exact matches before trying to 'guess' via keywords.
     """
-    new_cols = {}
-    for col in df.columns:
-        col_clean = str(col).replace('\n', ' ').strip()
-        
-        # 1. Detect Date Column
-        if any(k in col_clean for k in ['תאריך', 'עסקה']) and not any(k in col_clean for k in ['סכום', 'חיוב']):
-            if 'תאריך עסקה' not in new_cols.values():
-                new_cols[col] = 'תאריך עסקה'
-        
-        # 2. Detect Business Name Column
-        elif any(k in col_clean for k in ['בית עסק', 'תיאור', 'פעולה']):
-            if 'שם בית עסק' not in new_cols.values():
-                new_cols[col] = 'שם בית עסק'
-                
-        # 3. Detect Amount Column (The fix for your error)
-        elif any(k in col_clean for k in ['סכום', 'חיוב', 'בש"ח', 'בש""ח']):
-            if 'סכום חיוב' not in new_cols.values():
-                new_cols[col] = 'סכום חיוב'
-                
-        # 4. Detect Category Column
-        elif 'ענף' in col_clean:
-            new_cols[col] = 'ענף'
+    # 1. First, clean all current column names (strip spaces and newlines)
+    df.columns = [str(col).replace('\n', ' ').strip() for col in df.columns]
+    
+    # 2. Define our target standard names
+    targets = {
+        'תאריך עסקה': ['תאריך', 'עסקה'],
+        'שם בית עסק': ['בית עסק', 'תיאור', 'פעולה'],
+        'סכום חיוב': ['סכום', 'חיוב', 'בש"ח', 'בש""ח'],
+        'ענף': ['ענף', 'קטגוריה']
+    }
+    
+    new_mapping = {}
+    used_targets = set()
+    
+    # Check if a target name already exists exactly as we want it
+    for target in targets:
+        if target in df.columns:
+            used_targets.add(target)
             
-    return df.rename(columns=new_cols)
+    # Try to map the rest
+    for col in df.columns:
+        if col in targets: # If already a standard name, skip
+            continue
+            
+        for target, keywords in targets.items():
+            if target in used_targets: # Only map each target once
+                continue
+                
+            # Logic for mapping
+            if target == 'תאריך עסקה' and any(k in col for k in keywords) and not any(k in col for k in ['סכום', 'חיוב']):
+                new_mapping[col] = target
+                used_targets.add(target)
+                break
+            elif target != 'תאריך עסקה' and any(k in col for k in keywords):
+                new_mapping[col] = target
+                used_targets.add(target)
+                break
+                
+    return df.rename(columns=new_mapping)
 
 def load_and_clean_data(file):
-    """Universal Credit Card Loader with Smart Header & Column Detection"""
-    # Key fragments to locate the table
+    """Universal Credit Card Loader - Handles duplicates and dynamic headers"""
     credit_keys = ['תאריך', 'עסקה', 'בית עסק', 'סכום']
     header_idx = find_header_row(file, credit_keys)
     file.seek(0)
     
-    # Load the actual data starting from detected header
     if file.name.endswith('.xlsx'):
         df = pd.read_excel(file, skiprows=header_idx)
     else:
@@ -87,35 +98,36 @@ def load_and_clean_data(file):
     # Apply Smart Renaming
     df = smart_rename_columns(df)
     
-    # Final column name cleaning (just in case)
-    df.columns = [str(col).replace('\n', ' ').strip() for col in df.columns]
+    # Critical Fix: Remove any duplicate columns that might have slipped through
+    df = df.loc[:, ~df.columns.duplicated()]
 
-    # Check if essential columns exist before proceeding
-    required = ['תאריך עסקה', 'סכום חיוב']
-    for req in required:
-        if req not in df.columns:
-            # Fallback for very weird files - creating empty data
-            return pd.DataFrame()
+    # Required columns check
+    if 'תאריך עסקה' not in df.columns or 'סכום חיוב' not in df.columns:
+        return pd.DataFrame()
 
-    # Data Cleaning & Formatting
+    # Data Cleaning
     df = df.dropna(subset=['תאריך עסקה', 'סכום חיוב'], how='all')
     df['תאריך עסקה'] = pd.to_datetime(df['תאריך עסקה'], dayfirst=True, errors='coerce')
     df = df.dropna(subset=['תאריך עסקה'])
     
-    # Ensure 'ענף' (Category) exists for the Pie Chart
     if 'ענף' not in df.columns:
         df['ענף'] = 'General / Uncategorized'
     df['ענף'] = df['ענף'].fillna('General / Uncategorized')
 
-    # Unique ID for duplicates removal
-    df['unique_id'] = df['תאריך עסקה'].astype(str) + df.get('שם בית עסק', 'Unknown').astype(str) + df['סכום חיוב'].astype(str)
+    # Calculate Unique ID for duplicate detection
+    df['unique_id'] = (
+        df['תאריך עסקה'].astype(str) + 
+        df.get('שם בית עסק', 'Unknown').astype(str) + 
+        df['סכום חיוב'].astype(str)
+    )
+    
     df['Month-Year'] = df['תאריך עסקה'].dt.strftime('%Y-%m')
     df['סכום חיוב'] = pd.to_numeric(df['סכום חיוב'], errors='coerce').fillna(0)
     
     return df
 
 def load_and_clean_bank_data(file):
-    """Universal Bank Activity Loader with Smart Header Detection"""
+    """Universal Bank Activity Loader"""
     bank_keys = ['זכות', 'חובה', 'פעולה', 'יתרה']
     header_idx = find_header_row(file, bank_keys)
     file.seek(0)
@@ -130,15 +142,14 @@ def load_and_clean_bank_data(file):
             df = pd.read_csv(file, skiprows=header_idx, encoding='utf-8')
 
     df.columns = [str(col).strip() for col in df.columns]
+    df = df.loc[:, ~df.columns.duplicated()] # Remove duplicates
     
-    # Dynamically find the Date column
     date_col = next((c for c in df.columns if 'תאריך' in c), None)
     if not date_col:
         return pd.DataFrame()
 
     df = df.dropna(subset=[date_col], how='all')
     
-    # Handle Numeric Excel Dates vs Strings
     if pd.api.types.is_numeric_dtype(df[date_col]):
         df['תאריך'] = pd.to_datetime(df[date_col], unit='D', origin='1899-12-30')
     else:
@@ -147,7 +158,6 @@ def load_and_clean_bank_data(file):
     df = df.dropna(subset=['תאריך'])
     df['Month-Year'] = df['תאריך'].dt.strftime('%Y-%m')
 
-    # Handle Money Columns (Income vs Expense)
     for col in ['זכות', 'חובה']:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '').str.strip(), errors='coerce').fillna(0)
@@ -160,7 +170,7 @@ def load_and_clean_bank_data(file):
 tab_credit, tab_bank = st.tabs(["💳 Credit Card Analysis", "🏦 Bank Account Activity"])
 
 with tab_credit:
-    uploaded_files = st.file_uploader("Upload Credit Files (Smart Detection) 👋", type=["csv", "xlsx"], accept_multiple_files=True, key="credit_up")
+    uploaded_files = st.file_uploader("Upload Credit Files (Universal Support) 👋", type=["csv", "xlsx"], accept_multiple_files=True, key="credit_up")
     
     if uploaded_files:
         all_dfs = []
@@ -173,7 +183,9 @@ with tab_credit:
                 st.error(f"Error processing {file.name}: {e}")
         
         if all_dfs:
-            full_df = pd.concat(all_dfs, ignore_index=True).drop_duplicates(subset=['unique_id'])
+            # Concatenate and handle labels carefully
+            full_df = pd.concat(all_dfs, ignore_index=True)
+            full_df = full_df.drop_duplicates(subset=['unique_id'])
             
             st.sidebar.header("⚙️ Filters")
             available_months = sorted(full_df['Month-Year'].unique(), reverse=True)
