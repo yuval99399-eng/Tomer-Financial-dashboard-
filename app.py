@@ -8,7 +8,8 @@ st.set_page_config(page_title="Tomer Financial Dashboard", layout="wide")
 st.title("Financial Analysis 💰")
 
 # SMART DATA PROCESSING FUNCTIONS 
-def find_header_row(file, keywords): """Scans the first 20 rows of a file to find the row that contains most of the expected headers."""
+def find_header_row(file, keywords): 
+    """Scans the first 20 rows of a file to find the row that contains most of the expected headers."""
     file.seek(0)
     if file.name.endswith(('.xls', '.xlsx')):
         df_peek = pd.read_excel(file, nrows=20, header=None)
@@ -28,7 +29,8 @@ def find_header_row(file, keywords): """Scans the first 20 rows of a file to fin
             header_idx = i
     return header_idx
 
-def smart_rename_columns(df): """ Refined logic to prevent duplicate column names. Priority is given to exact matches before trying to 'guess' via keywords."""
+def smart_rename_columns(df): 
+    """ Refined logic to prevent duplicate column names. Priority is given to exact matches before trying to 'guess' via keywords."""
     df.columns = [str(col).replace('\n', ' ').strip() for col in df.columns]
     targets = {
         'תאריך עסקה': ['תאריך', 'עסקה'],
@@ -62,7 +64,8 @@ def smart_rename_columns(df): """ Refined logic to prevent duplicate column name
     return df.rename(columns=new_mapping)
 
 
-def load_and_clean_data(file): """Universal Credit Card Loader"""
+def load_and_clean_data(file): 
+    """Universal Credit Card Loader"""
     credit_keys = ['תאריך', 'עסקה', 'בית עסק', 'סכום']
     header_idx = find_header_row(file, credit_keys)
     file.seek(0)
@@ -95,7 +98,8 @@ def load_and_clean_data(file): """Universal Credit Card Loader"""
     
     return df
 
-def load_and_clean_bank_data(file): """Universal Bank Activity Loader"""
+def load_and_clean_bank_data(file): 
+    """Universal Bank Activity Loader"""
     bank_keys = ['זכות', 'חובה', 'פעולה', 'יתרה']
     header_idx = find_header_row(file, bank_keys)
     file.seek(0)
