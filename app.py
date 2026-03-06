@@ -180,7 +180,10 @@ with tab_credit:
                 st.subheader("Compare months 📈")
                 if not filtered_df.empty:
                     m_comp = filtered_df.groupby(['Month-Year', 'ענף'])['סכום חיוב'].sum().reset_index()
-                    fig_bar = px.bar(m_comp, x='ענף', y='סכום חיוב', color='Month-Year', barmode='group', text='סכום חיוב')
+                    avg_comp = m_comp.groupby('ענף')['סכום חיוב'].mean().reset_index()
+                    avg_comp['Month-Year'] = 'Average (Selected Period)' 
+                    combined_comp = pd.concat([m_comp, avg_comp], ignore_index=True)
+                    fig_bar = px.bar(m_comp, x='ענף', y='סכום חיוב', color='Month-Year', barmode='group', text='סכום חיוב',color_discrete_sequence=px.colors.qualitative.Prism)
                     fig_bar.update_traces(texttemplate='%{text:.2s}', textposition='outside', textangle=-90)
                     fig_bar.update_layout(yaxis_range=[0, m_comp['סכום חיוב'].max() * 1.25], margin=dict(t=50))
                     st.plotly_chart(fig_bar, use_container_width=True)
