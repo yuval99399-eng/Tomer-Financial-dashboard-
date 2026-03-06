@@ -211,8 +211,7 @@ with tab_bank:
             m_bank = full_bank_df.groupby('Month-Year').agg({'זכות': 'sum', 'חובה': 'sum'}).reset_index().sort_values('Month-Year')
             plot_data = m_bank.melt(id_vars='Month-Year', value_vars=['זכות', 'חובה'], var_name='Type', value_name='Amount')
             st.subheader("Monthly Income vs Expenses")
-            fig_bank = px.bar(plot_data, x='Month-Year', y='Amount', color='Type', barmode='group', text='Amount',
-                             color_discrete_map={'זכות': '#2ECC71', 'חובה': '#E74C3C'})
+            fig_bank = px.bar(plot_data, x='Month-Year', y='Amount', color='Type', barmode='group', text='Amount', color_discrete_map={'זכות': '#2ECC71', 'חובה': '#E74C3C'})
             fig_bank.update_traces(texttemplate='%{text:.3s}', textposition='outside', textangle=-90)
             fig_bank.update_layout(yaxis_range=[0, plot_data['Amount'].max() * 1.25], margin=dict(t=60))
             st.plotly_chart(fig_bank, use_container_width=True)
@@ -226,9 +225,7 @@ with tab_bank:
                 bank_month_detail = st.selectbox("Select Month for Detail:", available_bank_months, key="bank_month_sel")
                 month_detail_df = full_bank_df[full_bank_df['Month-Year'] == bank_month_detail].copy()
                 cols_to_show = [c for c in month_detail_df.columns if c != 'תאריך_מסודר']
-                st.dataframe(month_detail_df[cols_to_show].sort_values('Month-Year', ascending=False), 
-                             use_container_width=True, hide_index=True)
-                
+                st.dataframe(month_detail_df[cols_to_show].sort_values('Month-Year', ascending=False),use_container_width=True, hide_index=True)
                 # Show summary row for that month
                 total_income = month_detail_df['זכות'].sum()
                 total_expense = month_detail_df['חובה'].sum()
