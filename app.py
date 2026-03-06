@@ -181,7 +181,7 @@ with tab_credit:
                 if not filtered_df.empty:
                     m_comp = filtered_df.groupby(['Month-Year', 'ענף'])['סכום חיוב'].sum().reset_index()
                     avg_comp = m_comp.groupby('ענף')['סכום חיוב'].mean().reset_index()
-                    avg_comp['Month-Year'] = 'Average (Selected Period)' 
+                    avg_comp['Month-Year'] = 'Average' 
                     combined_comp = pd.concat([m_comp, avg_comp], ignore_index=True)
                     fig_bar = px.bar(combined_comp, x='ענף', y='סכום חיוב', color='Month-Year', barmode='group', text='סכום חיוב',color_discrete_sequence=px.colors.qualitative.Prism)
                     fig_bar.update_traces(texttemplate='%{text:.2s}', textposition='outside', textangle=-90)
