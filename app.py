@@ -7,7 +7,25 @@ import io
 st.set_page_config(page_title="Tomer Financial Dashboard", layout="wide")
 st.title("Financial Analysis 💰")
 
-# SMART DATA PROCESSING FUNCTIONS 
+# SMART DATA PROCESSING FUNCTIONS
+
+def assign_billing_cycle(date):
+    """Assigns a 10th-to-10th billing cycle label, e.g. '2026-02 → 2026-03' for dates 10/Feb to 9/Mar."""
+    if date.day >= 10:
+        start_month, start_year = date.month, date.year
+    else:
+        start_month = date.month - 1
+        start_year = date.year
+        if start_month < 1:
+            start_month = 12
+            start_year -= 1
+    end_month = start_month + 1
+    end_year = start_year
+    if end_month > 12:
+        end_month = 1
+        end_year += 1
+    return f"{start_year}-{start_month:02d} → {end_year}-{end_month:02d}"
+
 def find_header_row(file, keywords): 
     """Scans the first 20 rows of a file to find the row that contains most of the expected headers."""
     file.seek(0)
@@ -94,6 +112,7 @@ def load_and_clean_data(file):
     df['ענף'] = df['ענף'].fillna('General / Uncategorized')
     df['unique_id'] = df['תאריך עסקה'].astype(str) + df.get('שם בית עסק', 'Unknown').astype(str) + df['סכום חיוב'].astype(str)
     df['Month-Year'] = df['תאריך עסקה'].dt.strftime('%Y-%m')
+    df['Billing-Cycle'] = df['תאריך עסקה'].apply(assign_billing_cycle)
     df['סכום חיוב'] = pd.to_numeric(df['סכום חיוב'], errors='coerce').fillna(0)
     
     return df
@@ -159,18 +178,20 @@ with tab_credit:
             full_df = pd.concat(all_dfs, ignore_index=True).drop_duplicates(subset=['unique_id'])
             
             st.sidebar.header("⚙️ Filters")
-            available_months = sorted(full_df['Month-Year'].unique(), reverse=True)
-            selected_months = st.sidebar.multiselect("1. Month", options=available_months, default=available_months[:12])
+            use_billing_cycle = st.sidebar.checkbox("Use billing cycle (10th → 10th)", value=False)
+            period_col = 'Billing-Cycle' if use_billing_cycle else 'Month-Year'
+            available_months = sorted(full_df[period_col].unique(), reverse=True)
+            selected_months = st.sidebar.multiselect("1. Period", options=available_months, default=available_months[:12])
             all_categories = sorted(full_df['ענף'].unique().tolist())
             selected_categories = st.sidebar.multiselect("2. Category", options=all_categories, default=all_categories)
-            filtered_df = full_df[(full_df['Month-Year'].isin(selected_months)) & (full_df['ענף'].isin(selected_categories))]
+            filtered_df = full_df[(full_df[period_col].isin(selected_months)) & (full_df['ענף'].isin(selected_categories))]
             col1, col2 = st.columns(2)
             
             with col1:
                 st.subheader("Pie Chart 📊")
                 if len(selected_months) > 0:
-                    pie_month = st.selectbox("For this month:", selected_months, key="credit_month_sel")
-                    pie_data = filtered_df[filtered_df['Month-Year'] == pie_month]
+                    pie_month = st.selectbox("For this period:", selected_months, key="credit_month_sel")
+                    pie_data = filtered_df[filtered_df[period_col] == pie_month]
                     if not pie_data.empty:
                         summary = pie_data.groupby('ענף')['סכום חיוב'].sum().reset_index()
                         fig_pie = px.pie(summary, values='סכום חיוב', names='ענף', hole=0.4)
@@ -179,11 +200,11 @@ with tab_credit:
             with col2:
                 st.subheader("Compare months 📈")
                 if not filtered_df.empty:
-                    m_comp = filtered_df.groupby(['Month-Year', 'ענף'])['סכום חיוב'].sum().reset_index()
+                    m_comp = filtered_df.groupby([period_col, 'ענף'])['סכום חיוב'].sum().reset_index()
                     avg_comp = m_comp.groupby('ענף')['סכום חיוב'].mean().reset_index()
-                    avg_comp['Month-Year'] = 'Average' 
+                    avg_comp[period_col] = 'Average' 
                     combined_comp = pd.concat([m_comp, avg_comp], ignore_index=True)
-                    fig_bar = px.bar(combined_comp, x='ענף', y='סכום חיוב', color='Month-Year', barmode='group', text='סכום חיוב',color_discrete_sequence=px.colors.qualitative.Prism)
+                    fig_bar = px.bar(combined_comp, x='ענף', y='סכום חיוב', color=period_col, barmode='group', text='סכום חיוב',color_discrete_sequence=px.colors.qualitative.Prism)
                     fig_bar.update_traces(texttemplate='%{text:.2s}', textposition='outside', textangle=-90)
                     fig_bar.update_layout(yaxis_range=[0, m_comp['סכום חיוב'].max() * 1.25], margin=dict(t=50))
                     st.plotly_chart(fig_bar, use_container_width=True)
@@ -193,6 +214,9 @@ with tab_credit:
                 st.subheader(f"📋 Transactions for {pie_month}")
                 display_cols = ['תאריך עסקה', 'שם בית עסק', 'סכום חיוב', 'ענף', 'סוג עסקה']
                 st.dataframe(pie_data[[c for c in display_cols if c in pie_data.columns]].sort_values('תאריך עסקה', ascending=False), use_container_width=True, hide_index=True)
+                if 'סכום חיוב' in pie_data.columns:
+                    total_expenses = pie_data['סכום חיוב'].sum()
+                    st.metric("Total Expenses (סכום חיוב)", f"₪{total_expenses:,.2f}")
 
 # TAB 2: BANK ACCOUNT ACTIVITY 
 with tab_bank:
