@@ -2,10 +2,46 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import io
+import os
+import glob
+import configparser
 
 # Page Settings
 st.set_page_config(page_title="Tomer Financial Dashboard", layout="wide")
 st.title("Financial Analysis 💰")
+
+# CONFIG / DEFAULT PATHS
+
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.ini")
+SUPPORTED_EXTENSIONS = (".csv", ".xlsx", ".xls")
+
+def load_config():
+    """Reads default folder paths from config.ini (returns {} if missing)."""
+    config = configparser.ConfigParser()
+    if os.path.exists(CONFIG_PATH):
+        config.read(CONFIG_PATH)
+        if config.has_section("paths"):
+            return dict(config.items("paths"))
+    return {}
+
+def get_files_from_dir(directory):
+    """Returns sorted list of supported file paths inside a directory."""
+    if not directory or not os.path.isdir(directory):
+        return []
+    files = []
+    for ext in SUPPORTED_EXTENSIONS:
+        files.extend(glob.glob(os.path.join(directory, f"*{ext}")))
+    return sorted(files)
+
+def open_local_files(paths):
+    """Opens local file paths as binary file handles (compatible with the loaders below)."""
+    handles = []
+    for p in paths:
+        try:
+            handles.append(open(p, "rb"))
+        except Exception as e:
+            st.warning(f"Could not open {os.path.basename(p)}: {e}")
+    return handles
 
 # SMART DATA PROCESSING FUNCTIONS
 
@@ -157,16 +193,32 @@ def load_and_clean_bank_data(file):
             
     return df
 
-# INTERFACE TABS 
+# INTERFACE TABS
+config = load_config()
+credit_default_files = get_files_from_dir(config.get("credits"))
+bills_default_files = get_files_from_dir(config.get("bills"))
+
 tab_credit, tab_bank = st.tabs(["💳 Credit Card Analysis", "🏦 Bank Account Activity"])
 
-#  TAB 1: CREDIT CARD ANALYSIS 
+#  TAB 1: CREDIT CARD ANALYSIS
 with tab_credit:
-    uploaded_files = st.file_uploader("Upload Credit Files 👋", type=["csv", "xlsx"], accept_multiple_files=True, key="credit_up")
-    
+    use_default_credit = st.checkbox(
+        f"Auto-load {len(credit_default_files)} file(s) from default folder",
+        value=bool(credit_default_files),
+        key="credit_default",
+        disabled=not credit_default_files,
+    )
+    uploaded_files = st.file_uploader("Upload extra Credit Files 👋", type=["csv", "xlsx"], accept_multiple_files=True, key="credit_up")
+
+    credit_sources = []
+    if use_default_credit:
+        credit_sources.extend(open_local_files(credit_default_files))
     if uploaded_files:
+        credit_sources.extend(uploaded_files)
+
+    if credit_sources:
         all_dfs = []
-        for file in uploaded_files:
+        for file in credit_sources:
             try:
                 processed_df = load_and_clean_data(file)
                 if not processed_df.empty:
@@ -221,10 +273,23 @@ with tab_credit:
 # TAB 2: BANK ACCOUNT ACTIVITY 
 with tab_bank:
     st.header("Bank Flow Analysis")
-    uploaded_bank = st.file_uploader("Upload Bank Files 👋", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="bank_up")
+    use_default_bank = st.checkbox(
+        f"Auto-load {len(bills_default_files)} file(s) from default folder",
+        value=bool(bills_default_files),
+        key="bank_default",
+        disabled=not bills_default_files,
+    )
+    uploaded_bank = st.file_uploader("Upload extra Bank Files 👋", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="bank_up")
+
+    bank_sources = []
+    if use_default_bank:
+        bank_sources.extend(open_local_files(bills_default_files))
     if uploaded_bank:
+        bank_sources.extend(uploaded_bank)
+
+    if bank_sources:
         bank_dfs = []
-        for b_file in uploaded_bank:
+        for b_file in bank_sources:
             try:
                 bank_dfs.append(load_and_clean_bank_data(b_file))
             except Exception as e:
@@ -261,5 +326,5 @@ with tab_bank:
                 m_col2.metric("Total Expenses (Chova)", f"₪{total_expense:,.2f}")
                 m_col3.metric("Net Balance", f"₪{net_balance:,.2f}", delta=f"{net_balance:,.2f}")
 
-if not uploaded_files and not uploaded_bank:
-    st.info("Welcome 👋 Please Upload Your Files :)")
+if not credit_sources and not bank_sources:
+    st.info("Welcome 👋 No files found. Set your folders in config.ini or upload files above :)")
